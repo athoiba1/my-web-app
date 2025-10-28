@@ -12,18 +12,14 @@ pipeline {
     }
 
     stages {
-        // -----------------------------------------------------------------
-        // STAGE 1: Checkout App Code
-        // -----------------------------------------------------------------
+        // ... (Stages 1, 2, 3 are unchanged) ...
+        
         stage('Checkout App') {
             steps {
                 checkout scm
             }
         }
         
-        // -----------------------------------------------------------------
-        // STAGE 2: Checkout Config Repo
-        // -----------------------------------------------------------------
         stage('Checkout Config') {
             steps {
                 echo "Checking out Kubernetes config from ${CONFIG_REPO_URL}"
@@ -33,9 +29,6 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------------------
-        // STAGE 3: Build & Push Image
-        // -----------------------------------------------------------------
         stage('Build & Push Image') {
             steps {
                 script {
@@ -58,10 +51,11 @@ pipeline {
                 script {
                     echo "Checking which color is currently live..."
                     
-                    // --- FIX: Use 'env.' and '@' to make the command quiet ---
+                    // --- FIX: Use double quotes for Groovy string interpolation ---
+                    // --- and single quotes for the inner jsonpath string ---
                     env.LIVE_COLOR = bat(
                         returnStdout: true,
-                        script: '@kubectl get service ${SERVICE_NAME} -o=jsonpath="{.spec.selector.color}"'
+                        script: "@kubectl get service ${SERVICE_NAME} -o=jsonpath='{.spec.selector.color}'"
                     ).trim()
 
                     if (env.LIVE_COLOR == "blue") {
@@ -75,13 +69,11 @@ pipeline {
             }
         }
 
-        // -----------------------------------------------------------------
-        // STAGE 5: Deploy "Green" (The New Version) (FIXED)
-        // -----------------------------------------------------------------
+        // ... (Stages 5, 6, 7, 8 are unchanged and will now work) ...
+
         stage('Deploy New Version (Green)') {
             steps {
                 script {
-                    // --- FIX: Use 'env.' prefix ---
                     def newAppName = "my-web-app-${env.NEW_COLOR}"
                     def imageWithTag = "${DOCKER_USERNAME}/${IMAGE_NAME}:${env.BUILD_NUMBER}"
 
@@ -90,7 +82,7 @@ pipeline {
                     def deploymentText = readFile 'config-repo/deployment-template.yaml'
                     
                     deploymentText = deploymentText.replace('${APP_NAME}', newAppName)
-                                                .replace('${COLOR}', env.NEW_COLOR) // --- FIX: Use 'env.' prefix ---
+                                                .replace('${COLOR}', env.NEW_COLOR)
                                                 .replace('${IMAGE_WITH_TAG}', imageWithTag)
                     
                     writeFile file: 'new-deployment.yaml', text: deploymentText
@@ -102,49 +94,37 @@ pipeline {
             }
         }
         
-        // -----------------------------------------------------------------
-        // STAGE 6: Manual Approval (Test "Green" Environment) (FIXED)
-        // -----------------------------------------------------------------
         stage('Manual Approval') {
             steps {
-                // --- FIX: Use 'env.' prefix ---
                 echo "New version '${env.NEW_COLOR}' is deployed but not live."
                 echo "Test it by running: kubectl port-forward deployment/my-web-app-${env.NEW_COLOR} 9090:8080"
                 
-                input "Ready to switch live traffic to ${env.NEW_COLOR}?" // --- FIX: Use 'env.' prefix ---
+                input "Ready to switch live traffic to ${env.NEW_COLOR}?"
             }
         }
         
-        // -----------------------------------------------------------------
-        // STAGE 7: Flip Live Traffic (FIXED)
-        // -----------------------------------------------------------------
         stage('Flip Live Traffic') {
             steps {
                 script {
                     withKubeConfig([credentialsId: 'kubeconfig-creds']) {
-                        // --- FIX: Use 'env.' prefix ---
                         echo "Flipping switch! Pointing ${SERVICE_NAME} selector to color: ${env.NEW_COLOR}"
 
-                        def patchContent = "{\"spec\":{\"selector\":{\"app\":\"my-web-app\",\"color\":\"${env.NEW_COLOR}\"}}}" // --- FIX: Use 'env.' prefix ---
+                        def patchContent = "{\"spec\":{\"selector\":{\"app\":\"my-web-app\",\"color\":\"${env.NEW_COLOR}\"}}}"
                         writeFile file: 'patch.json', text: patchContent
                         
                         bat "kubectl patch service ${SERVICE_NAME} --patch-file patch.json"
                         
-                        echo "Success! ${env.NEW_COLOR} is now live." // --- FIX: Use 'env.' prefix ---
+                        echo "Success! ${env.NEW_COLOR} is now live."
                     }
                 }
             }
         }
         
-        // -----------------------------------------------------------------
-        // STAGE 8: Cleanup Old Version (Blue) (FIXED)
-        // -----------------------------------------------------------------
         stage('Cleanup Old Version') {
             steps {
                 withKubeConfig([credentialsId: 'kubeconfig-creds']) {
-                    // --- FIX: Use 'env.' prefix ---
                     echo "Cleaning up old deployment: my-web-app-${env.LIVE_COLOR}"
-                    bat "kubectl delete deployment my-web-app-${env.LIVE_COLOR}" // --- FIX: Use 'env.' prefix ---
+                    bat "kubectl delete deployment my-web-app-${env.LIVE_COLOR}"
                 }
             }
         }
