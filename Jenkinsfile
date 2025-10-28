@@ -4,22 +4,26 @@ pipeline {
     agent any
 
     environment {
-        DOCKER_USERNAME     = "bakasensei" // Use your Docker username
+        DOCKER_USERNAME     = "bakasensei" // Your Docker username
         IMAGE_NAME          = "my-web-app"
         SERVICE_NAME        = "my-web-app-service"
-        // --- IMPORTANT: Make sure this is your config repo URL ---
+        // --- Make sure this is your config repo URL ---
         CONFIG_REPO_URL     = "https://github.com/athoiba1/my-k8s-config.git"
     }
 
     stages {
-        // ... (Stages 1, 2, 3 are unchanged) ...
-        
+        // -----------------------------------------------------------------
+        // STAGE 1: Checkout App Code
+        // -----------------------------------------------------------------
         stage('Checkout App') {
             steps {
                 checkout scm
             }
         }
         
+        // -----------------------------------------------------------------
+        // STAGE 2: Checkout Config Repo
+        // -----------------------------------------------------------------
         stage('Checkout Config') {
             steps {
                 echo "Checking out Kubernetes config from ${CONFIG_REPO_URL}"
@@ -29,6 +33,9 @@ pipeline {
             }
         }
 
+        // -----------------------------------------------------------------
+        // STAGE 3: Build & Push Image
+        // -----------------------------------------------------------------
         stage('Build & Push Image') {
             steps {
                 script {
@@ -46,18 +53,16 @@ pipeline {
         // -----------------------------------------------------------------
         // STAGE 4: Determine Deployment Colors (FIXED)
         // -----------------------------------------------------------------
-        // -----------------------------------------------------------------
-        // STAGE 4: Determine Deployment Colors (FIXED)
-        // -----------------------------------------------------------------
         stage('Determine Colors') {
             steps {
                 script {
                     echo "Checking which color is currently live..."
                     
+                    // --- FIX: Use double quotes and .replace() to clean the output ---
                     env.LIVE_COLOR = bat(
                         returnStdout: true,
                         script: "@kubectl get service ${SERVICE_NAME} -o=jsonpath='{.spec.selector.color}'"
-                    ).trim().replace("'", "") // <-- ADD THIS to strip the quotes
+                    ).trim().replace("'", "") // <-- This strips the quotes
 
                     if (env.LIVE_COLOR == "blue") {
                         env.NEW_COLOR = "green"
@@ -70,8 +75,9 @@ pipeline {
             }
         }
 
-        // ... (Stages 5, 6, 7, 8 are unchanged and will now work) ...
-
+        // -----------------------------------------------------------------
+        // STAGE 5: Deploy "Green" (The New Version)
+        // -----------------------------------------------------------------
         stage('Deploy New Version (Green)') {
             steps {
                 script {
@@ -95,6 +101,9 @@ pipeline {
             }
         }
         
+        // -----------------------------------------------------------------
+        // STAGE 6: Manual Approval (Test "Green" Environment)
+        // -----------------------------------------------------------------
         stage('Manual Approval') {
             steps {
                 echo "New version '${env.NEW_COLOR}' is deployed but not live."
@@ -104,6 +113,9 @@ pipeline {
             }
         }
         
+        // -----------------------------------------------------------------
+        // STAGE 7: Flip Live Traffic
+        // -----------------------------------------------------------------
         stage('Flip Live Traffic') {
             steps {
                 script {
@@ -121,6 +133,9 @@ pipeline {
             }
         }
         
+        // -----------------------------------------------------------------
+        // STAGE 8: Cleanup Old Version (Blue)
+        // -----------------------------------------------------------------
         stage('Cleanup Old Version') {
             steps {
                 withKubeConfig([credentialsId: 'kubeconfig-creds']) {
@@ -138,4 +153,3 @@ pipeline {
         }
     }
 }
-
