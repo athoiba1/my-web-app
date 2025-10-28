@@ -46,17 +46,18 @@ pipeline {
         // -----------------------------------------------------------------
         // STAGE 4: Determine Deployment Colors (FIXED)
         // -----------------------------------------------------------------
+        // -----------------------------------------------------------------
+        // STAGE 4: Determine Deployment Colors (FIXED)
+        // -----------------------------------------------------------------
         stage('Determine Colors') {
             steps {
                 script {
                     echo "Checking which color is currently live..."
                     
-                    // --- FIX: Use double quotes for Groovy string interpolation ---
-                    // --- and single quotes for the inner jsonpath string ---
                     env.LIVE_COLOR = bat(
                         returnStdout: true,
                         script: "@kubectl get service ${SERVICE_NAME} -o=jsonpath='{.spec.selector.color}'"
-                    ).trim()
+                    ).trim().replace("'", "") // <-- ADD THIS to strip the quotes
 
                     if (env.LIVE_COLOR == "blue") {
                         env.NEW_COLOR = "green"
@@ -137,3 +138,4 @@ pipeline {
         }
     }
 }
+
