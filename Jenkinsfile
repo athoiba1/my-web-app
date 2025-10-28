@@ -11,27 +11,27 @@ pipeline {
         CONFIG_REPO_URL     = "https://github.com/athoiba1/my-k8s-config.git"
     }
 
-    // --- YOU ARE MISSING ALL OF THIS ---
     stages {
         // -----------------------------------------------------------------
         // STAGE 1: Checkout App Code
         // -----------------------------------------------------------------
         stage('Checkout App') {
             steps {
-                // This checks out the repo this Jenkinsfile lives in
                 checkout scm
             }
         }
         
         // -----------------------------------------------------------------
-        // STAGE 2: Checkout Config Repo
+        // STAGE 2: Checkout Config Repo (FIXED)
         // -----------------------------------------------------------------
         stage('Checkout Config') {
             steps {
                 echo "Checking out Kubernetes config from ${CONFIG_REPO_URL}"
-                // This checks out your second repo into a subdirectory
-                // named 'config-repo'
-                git url: CONFIG_REPO_URL, branch: 'main', dir: 'config-repo'
+                // --- FIX: Use the dir() step to create a subdirectory ---
+                dir('config-repo') {
+                    // This checks out the repo *into* the 'config-repo' folder
+                    git url: CONFIG_REPO_URL, branch: 'main'
+                }
             }
         }
 
@@ -85,7 +85,6 @@ pipeline {
 
                     echo "Deploying new version to ${newAppName} with image ${imageWithTag}"
 
-                    // --- Read the template from the 'config-repo' subdirectory ---
                     def deploymentText = readFile 'config-repo/deployment-template.yaml'
                     
                     deploymentText = deploymentText.replace('${APP_NAME}', newAppName)
@@ -114,19 +113,23 @@ pipeline {
         }
         
         // -----------------------------------------------------------------
-        // STAGE 7: Flip Live Traffic (Promote to Live)
+        // STAGE 7: Flip Live Traffic (FIXED)
         // -----------------------------------------------------------------
         stage('Flip Live Traffic') {
             steps {
-                withKubeConfig([credentialsId: 'kubeconfig-creds']) {
-                    echo "Flipping switch! Pointing ${SERVICE_NAME} selector to color: ${NEW_COLOR}"
+                // --- FIX: Add script block for 'def' and logic ---
+                script {
+                    withKubeConfig([credentialsId: 'kubeconfig-creds']) {
+                        echo "Flipping switch! Pointing ${SERVICE_NAME} selector to color: ${NEW_COLOR}"
 
-                    def patchContent = "{\"spec\":{\"selector\":{\"app\":\"my-web-app\",\"color\":\"${NEW_COLOR}\"}}}"
-                    writeFile file: 'patch.json', text: patchContent
-                    
-                    bat "kubectl patch service ${SERVICE_NAME} --patch-file patch.json"
-                    
-                    echo "Success! ${NEW_COLOR} is now live."
+                        // This 'def' line is why the script block is needed
+                        def patchContent = "{\"spec\":{\"selector\":{\"app\":\"my-web-app\",\"color\":\"${NEW_COLOR}\"}}}"
+                        writeFile file: 'patch.json', text: patchContent
+                        
+                        bat "kubectl patch service ${SERVICE_NAME} --patch-file patch.json"
+                        
+                        echo "Success! ${NEW_COLOR} is now live."
+                    }
                 }
             }
         }
@@ -136,6 +139,7 @@ pipeline {
         // -----------------------------------------------------------------
         stage('Cleanup Old Version') {
             steps {
+                // This stage is fine, as it only contains steps
                 withKubeConfig([credentialsId: 'kubeconfig-creds']) {
                     echo "Cleaning up old deployment: my-web-app-${LIVE_COLOR}"
                     bat "kubectl delete deployment my-web-app-${LIVE_COLOR}"
@@ -143,12 +147,10 @@ pipeline {
             }
         }
     }
-    // --- END OF STAGES ---
     
     post {
         always {
             echo 'Pipeline finished. Cleaning up workspace...'
-            // This cleans up all checked-out code and temporary files
             deleteDir()
         }
     }
